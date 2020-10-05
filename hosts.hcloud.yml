@@ -1,0 +1,5 @@
+plugin: hcloud
+groups:
+  k3s: "'leader' in name or 'node' in name"
+  k3s_leader: "'leader' in name"
+  k3s_node: "'node' in name"

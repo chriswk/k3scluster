@@ -1,0 +1,16 @@
+key       = "key"
+cert      = "~/.ssh/id_ed25519.pub"
+location  = "hel1"
+image     = "ubuntu-20.04"
+
+network_name    = "k3s_network"
+network_range   = "172.16.0.0/12"
+network_subnet  = "172.16.1.0/24"
+
+leader_name = "leader"
+leader_type = "cx21"
+leader_ip   = "172.16.1.1"
+
+node_name_format  = "node-%d"
+node_type         = "cx21"
+node_count        = 2
