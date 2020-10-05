@@ -1,9 +1,9 @@
 terraform {
-    backend "remote" {
-        organization = "chriswk"
-    }
+  backend "remote" {
+    organization = "chriswk"
 
     workspaces {
-        name = "hcloud-k8s"
+      name = "hcloud-k8s"
     }
+  }
 }
