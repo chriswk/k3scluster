@@ -1,0 +1,6 @@
+network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses:
+        - {{ hcloud_floating_ip.stdout }}/32

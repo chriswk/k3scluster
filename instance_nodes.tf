@@ -11,7 +11,9 @@ resource "hcloud_server" "node" {
   user_data = templatefile("files/cloud_config.yml", {
     key = hcloud_ssh_key.key.public_key
   })
-  count = var.node_count
+  count    = var.node_count
+  ssh_keys = [hcloud_ssh_key.key.id]
+
 }
 
 resource "hcloud_server_network" "node" {

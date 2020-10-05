@@ -4,3 +4,4 @@ vars.auto.tfvars
 terraform.tfstate
 terraform.tfstate.backup
 *.plan
+.ssh

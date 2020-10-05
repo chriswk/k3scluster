@@ -1,0 +1,41 @@
+#cloud-config
+ssh_pwauth: false
+users:
+  - name: ubuntu
+    groups: users, admin, sudo
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh-authorized-keys:
+      - ${key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - linux-virtual-hwe-20.04
+  - fail2ban
+  - ufw
+  - git
+  - apparmor
+  - apparmor-profiles
+
+runcmd:
+  - apt install -f -y
+  - printf "[sshd]\nenabled = true\nbanaction = ufw\n" > /etc/fail2ban/jail.local
+  - ufw limit ssh/tcp
+  - ufw allow in on ens10
+  - ufw logging off
+  - ufw enable
+  - sed -i -e '/^PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+  - systemctl enable fail2ban
+  - systemctl enable ufw
+  - apt purge -y lxd lxd-client snapd
+  - apt clean
+  - apt auto-clean
+
+power_state:
+  mode: reboot
+  timeout: 5
+  condition: True

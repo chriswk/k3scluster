@@ -1,0 +1,186 @@
+- name: get hcloud token
+  local_action: command echo $HCLOUD_TOKEN
+  register: hcloud_token
+
+- name: get hcloud network
+  local_action: command terraform output hcloud_network
+  register: hcloud_network
+  run_once: true
+  changed_when: false
+
+- name: get k3s leader ip
+  local_action: command terraform output hcloud_leader_ip
+  register: hcloud_leader_ip
+  run_once: true
+  changed_when: false
+
+- name: get floating ip
+  local_action: command terraform output hcloud_floating_ip
+  register: hcloud_floating_ip
+  run_once: true
+  changed_when: false
+
+- name: gather factors from instances
+  setup:
+
+- name: Download k3s installer
+  get_url:
+    url: https://get.k3s.io
+    dest: /home/ubuntu/k3s-installer.sh
+    mode: "u+x"
+
+- name: Add floating ip to leader
+  template:
+    src: templates/60-floating-ip.yaml.j2
+    dest: /etc/netplan/60-floating-ip.yaml
+  when: "'k3s_leader' in group_names"
+  register: new_floating_ip
+  become: true
+
+- name: associate floating ip to leader
+  command: netplan apply
+  when: "'k3s_leader' in group_names and new_floating_ip.changed"
+  become: true
+
+- name: check if k3s is installed in leader
+  stat:
+    path: /usr/local/bin/k3s-uninstall.sh
+  register: k3s_uninstaller
+  when: "'k3s_leader' in group_names"
+
+- name: copy hcloud controller to leader
+  template:
+    src: hcloud_controller.yaml.j2
+    dest: hcloud_controller.yaml
+  when: "'k3s_leader' in group_names"
+
+- name: copy hcloud secrets to leader
+  template:
+    src: hcloud_secrets.yaml.j2
+    dest: hcloud_secrets.yaml
+  when: "'k3s_leader' in group_names"
+
+- name: get k3s version on leader
+  shell: k3s -v | sed 's/^.* version //g' | sed 's/ .*$//g'
+  when: "'k3s_leader' in group_names and k3s_uninstaller.stat.exists == True"
+  register: k3s_leader_version
+  changed_when: false
+
+- name: install k3s on leader
+  shell: /home/ubuntu/k3s-installer.sh server --tls-san {{ ansible_eth0.ipv4.address }} --flannel-iface ens10 --disable-cloud-controller --kubelet-arg cloud-provider=external --write-kubeconfig-mode 644
+  when: "'k3s_leader' in group_names and (k3s_uninstaller.stat.exists == False or (k3s_uninstaller.stat.exists == True and k3s_leader_version.stdout != k3s_version))"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+  notify: ufw cni rule
+  register: leader_installed
+
+- name: register kube_config
+  command: cat /etc/rancher/k3s/k3s.yaml
+  register: kube_config
+  when: "'k3s_leader' in group_names"
+  changed_when: false
+
+- name: get kube_config
+  local_action:
+    module: copy
+    content: "{{ kube_config.stdout }}"
+    dest: /tmp/kube_config.yaml
+  run_once: true
+  changed_when: false
+
+- name: correct IP in kube_config
+  local_action:
+    module: replace
+    path: /tmp/kube_config.yaml
+    regexp: "127.0.0.1"
+    replace: "{{ hcloud_leader_ip.stdout }}"
+  run_once: true
+  changed_when: false
+
+- name: create ~/.kube in leader
+  command: kubectl version
+  args:
+    creates: /home/ubuntu/.kube
+  when: "'k3s_leader' in group_names"
+
+- name: link kube_config to ~/.kube/config
+  file:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /home/ubuntu/.kube/config
+    state: link
+  notify: ufw kubectl rule
+  when: "'k3s_leader' in group_names"
+
+- name: apply hetzner cloud secrets
+  shell: kubectl apply --dry-run -f hcloud_secrets.yaml -o yaml | kubectl apply -f -
+  when: "'k3s_leader' in group_names"
+  changed_when: false
+
+- name: apply hetzner cloud controller
+  shell: kubectl apply --dry-run -f hcloud_controller.yaml -o yaml | kubectl apply -f -
+  when: "'k3s_leader' in group_names"
+  changed_when: false
+
+- name: register k3s agent join token on leader
+  command: cat /var/lib/rancher/k3s/server/node-token
+  register: k3s_leader_token
+  become: true
+  when: "'k3s_leader' in group_names"
+  changed_when: false
+
+- name: register ip on k3s leader
+  shell: ip -o -4 addr list ens10 | awk '{print $4}' | cut -d/ -f1
+  register: k3s_leader_ip
+  when: "'k3s_leader' in group_names"
+  changed_when: false
+
+- name: add dummy host to assign k3s leader token and ip
+  add_host:
+    name: "k3s_token_ip_holder"
+    ip: "{{ k3s_leader_ip.stdout }}"
+    token: "{{ k3s_leader_token.stdout }}"
+  changed_when: false
+
+- name: check if k3s is installed in worker nodes
+  stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: k3s_node_uninstaller
+  when: "'k3s_node' in group_names"
+
+- name: get k3s version on worker nodes
+  shell: k3s -v | sed 's/^.* version //g' | sed 's/ .*$//g'
+  when: "'k3s_node' in group_names and k3s_node_uninstaller.stat.exists == True"
+  register: k3s_agent_version
+  changed_when: false
+
+- name: Install k3s on worker nodes
+  shell: /home/ubuntu/k3s-installer.sh agent --server https://{{ hostvars['k3s_token_ip_holder']['ip'] }}:6443 --token {{ hostvars['k3s_token_ip_holder']['token'] }} --flannel-iface ens10 --kubelet-arg cloud-provider=external
+  when: "'k3s_node' in group_names and (k3s_node_uninstaller.stat.exists == False or (k3s_node_uninstaller.stat.exists == True and k3s_agent_version.stdout != k3s_version))"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+  notify: ufw cni rule
+
+- name: download helm3 installer
+  get_url:
+    url: https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    dest: /home/ubuntu/install_helm.sh
+    mode: "u+x"
+  when: "'k3s_leader' in group_names"
+
+- name: install helm3
+  shell: ./install_helm.sh
+  args:
+    chdir: /home/ubuntu
+    creates: /usr/local/bin/helm
+  when: "'k3s_leader' in group_names"
+
+- name: check if helm3 origin repo is installed
+  command: helm repo list
+  register: helm_repo
+  failed_when: helm_repo.rc < 0 or helm_repo.rc > 1
+  changed_when: helm_repo.rc == 1
+  when: "'k3s_leader' in group_names"
+
+- name: install helm origin repo
+  command: helm repo add origin https://kubernetes-charts.storage.googleapis.com/
+  when: "'k3s_leader' in group_names and helm_repo.rc == 1"

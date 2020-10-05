@@ -4,12 +4,13 @@ resource "hcloud_server" "leader" {
   ]
 
   name        = var.leader_name
-  server_type = var.master_type
+  server_type = var.leader_type
   image       = var.image
   location    = var.location
   user_data = templatefile("files/cloud_config.yml", {
     key = hcloud_ssh_key.key.public_key
   })
+  ssh_keys = [hcloud_ssh_key.key.id]
 
 }
 

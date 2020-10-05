@@ -6,10 +6,10 @@ variable "image" {}
 variable "network_name" {}
 variable "network_range" {}
 variable "network_subnet" {}
-
-variable "master_name" {}
-variable "master_type" {}
-variable "master_ip" {}
+variable "hcloud_token" {}
+variable "leader_name" {}
+variable "leader_type" {}
+variable "leader_ip" {}
 
 variable "node_name_format" {}
 variable "node_type" {}

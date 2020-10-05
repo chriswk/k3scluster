@@ -1,0 +1,15 @@
+- name: ufw kubectl rule
+  ufw:
+    rule: allow
+    direction: in
+    interface: eth0
+    to_port: "6443"
+  become: true
+
+- name: ufw cni rule
+  ufw:
+    rule: allow
+    direction: in
+    interface: cni0
+    src: 10.42.0.0/16
+  become: true
