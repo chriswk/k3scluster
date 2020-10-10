@@ -4,4 +4,7 @@ vars.auto.tfvars
 terraform.tfstate
 terraform.tfstate.backup
 *.plan
-.ssh
+.sshcluster-issuer.yaml
+ingress-teacoffe.yaml
+linkerddashboard.yaml
+traefikusers.yaml traefikwhitelist.yaml

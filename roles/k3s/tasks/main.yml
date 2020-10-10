@@ -67,7 +67,7 @@
   changed_when: false
 
 - name: install k3s on leader
-  shell: /home/ubuntu/k3s-installer.sh server --tls-san {{ ansible_eth0.ipv4.address }} --flannel-iface ens10 --disable-cloud-controller --kubelet-arg cloud-provider=external --write-kubeconfig-mode 644
+  shell: /home/ubuntu/k3s-installer.sh server --tls-san {{ ansible_eth0.ipv4.address }} --flannel-iface ens10 --disable=traefik --disable-cloud-controller --kubelet-arg cloud-provider=external --write-kubeconfig-mode 644
   when: "'k3s_leader' in group_names and (k3s_uninstaller.stat.exists == False or (k3s_uninstaller.stat.exists == True and k3s_leader_version.stdout != k3s_version))"
   environment:
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
