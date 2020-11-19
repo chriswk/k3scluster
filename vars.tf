@@ -1,5 +1,5 @@
 variable "key" {}
-variable "cert" {}
+variable "publickey" {}
 variable "location" {}
 variable "image" {}
 
